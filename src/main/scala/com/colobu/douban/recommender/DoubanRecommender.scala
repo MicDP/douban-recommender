@@ -9,7 +9,6 @@ package com.colobu.douban.recommender
 import scala.collection.Map
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.rdd.RDD
@@ -19,8 +18,9 @@ case class MovieRating(userID: String, movieID: Int, rating: Double) extends sca
 object DoubanRecommender {
 
   def main(args: Array[String]): Unit = {
-    val sc = new SparkContext(new SparkConf().setAppName("DoubanRecommender"))
-    //val base = "/opt/douban/"
+    val conf = new SparkConf().setAppName("DoubanRecommender").setMaster("local[*]")
+    val sc = new SparkContext(conf)
+//    val base = "/opt/douban/"
     val base = if (args.length > 0) args(0) else "/opt/douban/"
 
     //获取RDD
