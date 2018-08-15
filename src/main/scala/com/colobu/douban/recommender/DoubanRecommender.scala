@@ -18,7 +18,7 @@ case class MovieRating(userID: String, movieID: Int, rating: Double) extends sca
 object DoubanRecommender {
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("DoubanRecommender").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("DoubanRecommender").setMaster("local[1]")
     val sc = new SparkContext(conf)
 //    val base = "/opt/douban/"
     val base = if (args.length > 0) args(0) else "/opt/douban/"
