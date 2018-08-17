@@ -7,11 +7,11 @@
 package com.colobu.douban.recommender
 
 import scala.collection.Map
-
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.rdd.RDD
+import org.jblas.DoubleMatrix
 
 case class MovieRating(userID: String, movieID: Int, rating: Double) extends scala.Serializable
 
@@ -253,7 +253,7 @@ object DoubanRecommender {
 
     //allRecommendations.saveAsTextFile(base + "result.csv")
     allRecommendations.coalesce(1).sortByKey().saveAsTextFile(base + "result.csv")
-
+    calMAP(sc, ratings, model)
     unpersist(model)
   }
 
@@ -262,6 +262,41 @@ object DoubanRecommender {
     // when done with it in order to make sure they are promptly uncached
     model.userFeatures.unpersist()
     model.productFeatures.unpersist()
+  }
+
+  def calMAP(sc: SparkContext, ratings: RDD[Rating], model: MatrixFactorizationModel): Unit = {
+    // 得到电影线性表出向量
+    val itemFactors = model.productFeatures.map { case (id, factor) => factor }.collect()
+    val itemMatrix = new DoubleMatrix(itemFactors)
+    println(itemMatrix.rows, itemMatrix.columns)
+    val imBroadcast = sc.broadcast(itemMatrix)
+    val allRecs = model.userFeatures.map { case (userId, array) =>
+      val userVector = new DoubleMatrix(array)
+      val scores = imBroadcast.value.mmul(userVector)
+      // 根据评分降序
+      val sortedWithId = scores.data.zipWithIndex.sortBy(-_._1)
+      val recommendedIds = sortedWithId.map(_._2 + 1).toSeq
+      (userId, recommendedIds)
+    }
+
+    val userMovies = ratings.map {
+      case Rating(user, product, rating) =>
+        (user, product)
+    }.groupBy(_._1)
+
+    //    allRecs.take(2).foreach(println)
+    //    userMovies.take(2).foreach(println)
+    //    allRecs.join(userMovies).foreach(println)
+    import org.apache.spark.mllib.evaluation.RankingMetrics
+    val predictedAndTrue = allRecs.join(userMovies)
+    val predictedAndTrueForRanking = predictedAndTrue.map {
+      case (userId, (predicted, actualWithIds)) =>
+        val actual = actualWithIds.map(_._2)
+        (predicted.toArray, actual.toArray)
+    }
+    val rankingMetrics = new RankingMetrics(predictedAndTrueForRanking)
+    // 计算 MAP
+    println(s"Mean Average Precision = ${rankingMetrics.meanAveragePrecision}")
   }
 
 }
